@@ -1,69 +1,74 @@
-# ================================
-# FILE: .github/workflows/ios-ci.yml
-# Continuous Integration: build + test on push/PR to main
-# ================================
 name: iOS CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 env:
-  PROJECT: "Practice Plan Generator.xcodeproj"  # If you later use a workspace, change to WORKSPACE and set it.
-  SCHEME:  "Practice Plan Generator"            # Make sure this matches your Xcode scheme name.
-  DEST:    "platform=iOS Simulator,name=iPhone 15"
+  PROJECT: "Practice Plan Generator.xcodeproj"
+  SCHEME:  "Practice Plan Generator"
+  DEST_GENERIC: "generic/platform=iOS Simulator"
+  DEST_LATEST:  "platform=iOS Simulator,OS=latest"
 
 jobs:
   build-and-test:
-    runs-on: macos-15  # GitHub-hosted macOS with Xcode preinstalled
+    runs-on: macos-15
     timeout-minutes: 30
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Display Xcode version
+        run: xcodebuild -version
+
+      - name: List available schemes and simulators
+        run: |
+          echo "Available schemes:"
+          xcodebuild -list -project "$PROJECT" || true
+          echo "Available runtimes:"
+          xcrun simctl list runtimes
+          echo "Available devices:"
+          xcrun simctl list devices
 
       - name: Cache Xcode DerivedData
         uses: actions/cache@v4
         with:
           path: ~/Library/Developer/Xcode/DerivedData
-          key: ${{ runner.os }}-deriveddata-${{ hashFiles('**/*.swift', '**/*.pbxproj') }}
+          key: ${{ runner.os }}-deriveddata-${{ hashFiles('**/*.swift', '**/*.pbxproj', '**/Package.resolved') }}
           restore-keys: |
             ${{ runner.os }}-deriveddata-
 
-      # If you use CocoaPods later, uncomment these 3 lines:
-      # - name: Install CocoaPods
-      #   run: |
-      #     sudo gem install cocoapods --no-document
-      #     pod install
-      #   working-directory: .
-
-      - name: Show Xcode version
-        run: xcodebuild -version
-
-      # Build (fails fast if code doesn't compile)
-      - name: Build (Debug)
+      - name: Build (Debug configuration)
         run: |
+          set -eo pipefail
           xcodebuild \
             -project "$PROJECT" \
             -scheme "$SCHEME" \
-            -destination "$DEST" \
+            -destination "$DEST_GENERIC" \
             -configuration Debug \
             -skipPackagePluginValidation \
-            clean build
+            clean build | xcpretty
+        env:
+          LC_ALL: en_US.UTF-8
 
-      # Unit/UI Tests (if you have test targets)
-      - name: Test
+      - name: Run unit tests
         run: |
+          set -eo pipefail
           xcodebuild \
             -project "$PROJECT" \
             -scheme "$SCHEME" \
-            -destination "$DEST" \
+            -destination "$DEST_LATEST" \
             -configuration Debug \
             -enableCodeCoverage YES \
-            test
+            test | xcpretty
 
-      - name: Upload coverage (optional placeholder)
-        if: always()
-        run: echo "Add codecov here later if desired."
+      - name: Upload diagnostic logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcode-logs
+          path: ~/Library/Logs/DiagnosticReports
+          if-no-files-found: ignore
