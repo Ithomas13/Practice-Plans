@@ -1,3 +1,4 @@
+![iOS CI](https://github.com/ithomas13/Practice-Plans/actions/workflows/ios-ci.yml/badge.svg)
 # Golf Practice Planner
 
 A SwiftUI-based iOS app that generates personalized golf practice plans based on real round performance.  
